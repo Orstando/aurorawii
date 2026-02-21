@@ -84,18 +84,6 @@
 
 #define SERVER_IP "104.236.25.60"
 
-/*
-
-    inet_ntoa because it doesn't exist normally in libogc
-
-*/
-
-char* inet_ntoa(struct in_addr addr) {
-    static char buffer[16];
-    u8 *ip = (u8*)&addr.s_addr;
-    snprintf(buffer, sizeof(buffer), "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
-    return buffer;
-}
 
 /*
 
@@ -108,20 +96,20 @@ char* inet_ntoa(struct in_addr addr) {
 
 int http_post(const char* host, const char* path, const char* data) {
     int sock;
-    struct hostent *he;
     struct sockaddr_in addr;
     char request[1024];
     char response[1024];
 
-    he = net_gethostbyname(host);
-    if (!he) return -1;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(3072);
+
+    if (!inet_aton(host, &addr.sin_addr)) {
+        return -1; 
+    }
 
     sock = net_socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
     if (sock < 0) return -2;
-
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(3072);
-    addr.sin_addr.s_addr = *(u32*)he->h_addr_list[0];
 
     if (net_connect(sock, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
         net_close(sock);
@@ -146,7 +134,6 @@ int http_post(const char* host, const char* path, const char* data) {
         total += len;
     }
     response[total] = '\0';
-
 
     if (total > 0) {
         printf("Response (%d bytes):\n%.*s\n", total, total, response);
@@ -219,7 +206,6 @@ void append_message(char* to_add) {
     size_t len = strlen(chat);
     int space_left = 1000 - len - 1;
 
-    // Use a local array with sufficient size
     char to_add_n[512];
     snprintf(to_add_n, sizeof(to_add_n), "%s\n", to_add);
 
@@ -230,13 +216,12 @@ void append_message(char* to_add) {
         chatscroll = 10.0f;
     }
 
-    // Copy to_add into chat with line breaks every 50 chars
     int i = 0;
     while (i < add_len) {
-        int chunk = (add_len - i >= 50) ? 50 : add_len - i;
+        int chunk = (add_len - i >= 40) ? 40 : add_len - i;
         strncat(chat, to_add_n + i, chunk);
         len = strlen(chat);
-        if (i + chunk < add_len && len + 2 < 2000) {
+        if (i + chunk < add_len && len + 2 < 1000) {
             strcat(chat, "\n");
         }
         i += chunk;
@@ -276,13 +261,6 @@ int scene = 5;
 bool enteringusername = false;
 bool enteringpassword = false;
 
-void keyPress_cb(char sym) {
-	// Check for escape key to exit
-	if (sym == 0x1b) {
-		// goon
-    }
-}
-
 
 
 
@@ -304,7 +282,6 @@ int main() {
     ret = net_init();
     if (ret < 0) {
         printf("net_init() failed!\n");
-        goto exit;
     }
 
     while (if_configex(&ip, &netmask, &gateway, true, 1) < 0) {
@@ -320,15 +297,15 @@ int main() {
     char request[1024];
     char response[1024];
 
-    he2 = net_gethostbyname(SERVER_IP);
-    if (!he2) return -1;
+    if (!inet_aton(SERVER_IP, &addr2.sin_addr)) {
+        return -1;
+    }
 
     sock2 = net_socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
     if (sock2 < 0) return -2;
 
     addr2.sin_family = AF_INET;
     addr2.sin_port = htons(4040);
-    addr2.sin_addr.s_addr = *(u32*)he2->h_addr_list[0];
 
     if (net_connect(sock2, (struct sockaddr*)&addr2, sizeof(addr2)) < 0) {
         net_close(sock2);
@@ -342,8 +319,6 @@ int main() {
 
     int flags = net_fcntl(sock2, F_GETFL, 0);
     net_fcntl(sock2, F_SETFL, flags | O_NONBLOCK);
-
-    KEYBOARD_Init(NULL);
 
 
     while(1) {
@@ -384,7 +359,7 @@ int main() {
                         if (keys[i].output == '\n') {
                             if (scene == 1) {
                                 char message[300];
-                                sprintf(message, "{\"cmd\":\"CHAT\", \"content\":\"%s\", \"username\":\"%s\", \"password\":\"%s\"}", inputText, username, password);
+                                sprintf(message, "{\"cmd\":\"CHAT\", \"content\":\"%s\", \"username\":\"%s\", \"password\":\"%s\", \"platform\":\"Wii\"}", inputText, username, password);
                                 ret = http_post(SERVER_IP, "/api", message);
                                 sprintf(inputText, "");
                                 textPos = 0;
@@ -421,18 +396,10 @@ int main() {
             }
         }
 
-        int key;
-
-		if ((key = getchar()) != EOF)
-		{
-			// Display the pressed character
-			// Print readable characters (ASCII > 31)
-			if (key > 31)
-				showkeyboard = true;
-			// Convert Enter key (ASCII 13) to a newline
-			else if(key == 13)
-				showkeyboard = false;
-		}
+        if (pressed & WPAD_BUTTON_HOME) {
+            return 0;
+            break;
+        }
 
         GRRLIB_FillScreen(0xFFFFFFFF);
 
@@ -476,7 +443,7 @@ int main() {
                 }
                 if (px >= 400 - 20 && px <= 400 - 20 + 250 && py >= 400 - 40 && py <= 400 - 40 + 100) {
                     char sender[300];
-                    sprintf(sender, "{\"cmd\":\"LOGINACC\", \"username\":\"%s\", \"password\":\"%s\"}", username, password);
+                    sprintf(sender, "{\"cmd\":\"LOGINACC\", \"username\":\"%s\", \"password\":\"%s\", \"platform\":\"Wii\"}", username, password);
                     ret = http_post(SERVER_IP, "/api", sender);
                     scene = 1;
                 }
@@ -510,7 +477,7 @@ int main() {
                 }
                 if (px >= 400 - 20 && px <= 400 - 20 + 250 && py >= 400 - 40 && py <= 400 - 40 + 100) {
                     char sender[300];
-                    sprintf(sender, "{\"cmd\":\"MAKEACC\", \"username\":\"%s\", \"password\":\"%s\"}", username, password);
+                    sprintf(sender, "{\"cmd\":\"MAKEACC\", \"username\":\"%s\", \"password\":\"%s\", \"platform\":\"Wii\"}", username, password);
                     ret = http_post(SERVER_IP, "/api", sender);
                     scene = 5;
                 }
