@@ -312,7 +312,7 @@ int main() {
         return -3;
     }
 
-    ret = http_post(SERVER_IP, "/api", "{\"cmd\":\"CONNECT\", \"version\":\"4.3\", \"platform\":\"Wii\"}");
+    ret = http_post(SERVER_IP, "/api", "{\"cmd\":\"CONNECT\", \"version\":\"4.5\", \"platform\":\"Wii\"}");
     if (ret < 0) printf("Connect POST failed: %d\n", ret);
 
     char buffer[613];
